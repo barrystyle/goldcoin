@@ -1157,6 +1157,10 @@ bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex, const Consensus
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
+    if (nHeight == consensusParams.sbHeight) {
+        return consensusParams.sbAmount;
+    }
+
     CAmount nSubsidy = 50 * COIN;//First block is worth a ceremonial 50 coins.
 
     if (nHeight > 0 && nHeight <= 200)
@@ -1930,6 +1934,13 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint("bench", "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs]\n", (unsigned)block.vtx.size(), 0.001 * (nTime3 - nTime2), 0.001 * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : 0.001 * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * 0.000001);
 
+    CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
+    if (block.vtx[0]->GetValueOut() > blockReward)
+        return state.DoS(100,
+                         error("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)",
+                               block.vtx[0]->GetValueOut(), blockReward),
+                               REJECT_INVALID, "bad-cb-amount");
+
     ///////////////////////////////////////////////////////////////////////////////////////////
 
     // recipientscript is 76a914fe5cb4dfa8404d3a15af9a65fd19f6f502eaa99488ac
@@ -1938,31 +1949,11 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     // this can be verified by entering 'validateaddress EH1FCZeZniZXWvz2wqREPqZp6TMgxxTivP'
     // into the rpc console, and verifying the script is as above..
 
-    bool isMainnet = Params().NetworkIDString() == "main";
-    int recipientHeight = isMainnet ? 123456 : 3382;
-    std::string recipientAddress = isMainnet ? "EH1FCZeZniZXWvz2wqREPqZp6TMgxxTivP" : "myc7ZQcsWNQH2Lim8m5Drd89owS6s1DnEx";
-    CAmount recipientAmount = 11000000 * COIN;
-    CTxDestination recipientDestination = DecodeDestination(recipientAddress);
-    CScript recipientScript = GetScriptForDestination(recipientDestination);
-
-    // now for the actual consensus checking component..
-    // we dont want any tricks from the miners, so a few straightforward tests
-
-    if (pindex->nHeight == recipientHeight)
+    if (pindex->nHeight == chainparams.GetConsensus().sbHeight)
     {
-        const int outputsize = block.vtx[0]->vout.size();
-        if (outputsize != 1) return false;
+        const CScript recipientScript = GetScriptForDestination(DecodeDestination(chainparams.GetConsensus().sbAddress));
+        if (block.vtx[0]->vout.size() != 1) return false;
         if (block.vtx[0]->vout[0].scriptPubKey != recipientScript) return false;
-        if (block.vtx[0]->vout[0].nValue != recipientAmount) return false;
-    }
-    else
-    {
-        CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
-        if (block.vtx[0]->GetValueOut() > blockReward)
-            return state.DoS(100,
-                             error("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)",
-                                   block.vtx[0]->GetValueOut(), blockReward),
-                                   REJECT_INVALID, "bad-cb-amount");
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////
