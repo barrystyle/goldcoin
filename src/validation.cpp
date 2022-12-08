@@ -1938,8 +1938,9 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     // this can be verified by entering 'validateaddress EH1FCZeZniZXWvz2wqREPqZp6TMgxxTivP'
     // into the rpc console, and verifying the script is as above..
 
-    const int recipientHeight = 123456;
-    std::string recipientAddress = "EH1FCZeZniZXWvz2wqREPqZp6TMgxxTivP";
+    bool isMainnet = Params().NetworkIDString() == "main";
+    int recipientHeight = isMainnet ? 123456 : 3382;
+    std::string recipientAddress = isMainnet ? "EH1FCZeZniZXWvz2wqREPqZp6TMgxxTivP" : "myc7ZQcsWNQH2Lim8m5Drd89owS6s1DnEx";
     CAmount recipientAmount = 11000000 * COIN;
     CTxDestination recipientDestination = DecodeDestination(recipientAddress);
     CScript recipientScript = GetScriptForDestination(recipientDestination);
